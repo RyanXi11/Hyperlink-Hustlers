@@ -1,3 +1,4 @@
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -21,6 +22,8 @@ int failures = 0;
     } while (0)
 
 const std::string kFixtures = FIXTURE_DIR;
+
+bool near(double a, double b) { return std::fabs(a - b) < 1e-9; }
 
 std::string writeTemp(const std::string& name, const std::string& contents) {
     std::filesystem::path path = std::filesystem::temp_directory_path() / ("wikirace_" + name);
@@ -158,6 +161,51 @@ void testSubgraph() {
     CHECK(graph.inducedConnectedSubgraph(0, 0).vertexCount() == 0);
 }
 
+void testVertexWeights() {
+    Graph graph = loadTiny();
+    // In-degrees: 2 and 3 have 2 (the max), 0, 1, 4, 5 have 1, isolated 6 has 0.
+    CHECK(near(graph.vertexWeight(2), 1.0));
+    CHECK(near(graph.vertexWeight(3), 1.0));
+    CHECK(near(graph.vertexWeight(0), 2.0));
+    CHECK(near(graph.vertexWeight(4), 2.0));
+    CHECK(near(graph.vertexWeight(6), 2.0));
+
+    Graph wide;
+    CHECK(wide.loadEdges(writeTemp("wide_edges.txt", "1 0\n2 0\n3 0\n4 0\n0 1\n")));
+    CHECK(near(wide.vertexWeight(0), 1.0));
+    CHECK(near(wide.vertexWeight(1), 3.0));
+}
+
+void testWeightedToggle() {
+    Graph graph = loadTiny();
+    CHECK(!graph.isWeighted());
+    CHECK(near(graph.edgeWeight(2, 0), 1.0));
+    CHECK(near(graph.edgeWeight(0, 2), 1.0));
+
+    graph.setWeighted(true);
+    CHECK(graph.isWeighted());
+    CHECK(near(graph.edgeWeight(2, 0), 2.0));
+    CHECK(near(graph.edgeWeight(0, 2), 1.0));
+
+    graph.setWeighted(false);
+    CHECK(near(graph.edgeWeight(2, 0), 1.0));
+}
+
+void testSubgraphKeepsOriginalWeights() {
+    Graph graph = loadTiny();
+    graph.setWeighted(true);
+    Graph sub = graph.inducedConnectedSubgraph(2, 4);
+    CHECK(sub.isWeighted());
+    // Sub ids 0..3 are original 2, 0, 3, 1. Original 3 keeps weight 1.0 even though
+    // its in-link from 5 is dropped in the subgraph.
+    CHECK(near(sub.vertexWeight(0), 1.0));
+    CHECK(near(sub.vertexWeight(1), 2.0));
+    CHECK(near(sub.vertexWeight(2), 1.0));
+    CHECK(sub.inDegree(2) == 1);
+    CHECK(near(sub.vertexWeight(3), 2.0));
+    CHECK(near(sub.edgeWeight(0, 1), 2.0));
+}
+
 void testTitleMapGrowth() {
     TitleMap map;
     const int count = 100000;
@@ -186,6 +234,9 @@ int main() {
     testMalformedEdgesKeepExistingGraph();
     testDuplicateTitlesKeepFirstId();
     testSubgraph();
+    testVertexWeights();
+    testWeightedToggle();
+    testSubgraphKeepsOriginalWeights();
     testTitleMapGrowth();
 
     if (failures > 0) {
