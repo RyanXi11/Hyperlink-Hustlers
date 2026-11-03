@@ -1,6 +1,7 @@
 #include "graph/Graph.h"
 
 #include <climits>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -176,6 +177,7 @@ bool Graph::loadEdges(const std::string& path) {
     out_ = std::move(out);
     in_ = std::move(in);
     edgeCount_ = static_cast<long long>(edges.size());
+    computeWeights();
     lastError_.clear();
     return true;
 }
@@ -217,6 +219,7 @@ bool Graph::loadTitles(const std::string& path) {
 
     titles_ = std::move(titles);
     ensureVertexCount(static_cast<int>(titles_.size()));
+    computeWeights();
     indexTitles();
     lastError_.clear();
     return true;
@@ -269,8 +272,11 @@ Graph Graph::inducedConnectedSubgraph(int seed, int minVertices) const {
     int m = static_cast<int>(order.size());
     sub.out_.resize(m);
     sub.in_.resize(m);
+    sub.vertexWeight_.resize(m);
+    sub.weighted_ = weighted_;
     for (int i = 0; i < m; ++i) {
         int old = order[i];
+        sub.vertexWeight_[i] = vertexWeight_[old];
         for (int u : out_[old]) {
             if (newId[u] != -1) {
                 sub.out_[i].push_back(newId[u]);
@@ -299,6 +305,7 @@ std::size_t Graph::memoryBytes() const {
     for (std::size_t v = 0; v < out_.size(); ++v) {
         bytes += (out_[v].capacity() + in_[v].capacity()) * sizeof(int);
     }
+    bytes += vertexWeight_.capacity() * sizeof(double);
     bytes += titles_.capacity() * sizeof(std::string);
     for (const std::string& title : titles_) {
         if (title.capacity() > std::string().capacity()) {
@@ -312,6 +319,18 @@ void Graph::ensureVertexCount(int count) {
     if (count > vertexCount()) {
         out_.resize(count);
         in_.resize(count);
+    }
+}
+
+void Graph::computeWeights() {
+    int maxIn = 1;
+    for (int v = 0; v < vertexCount(); ++v) {
+        if (inDegree(v) > maxIn) maxIn = inDegree(v);
+    }
+    vertexWeight_.resize(out_.size());
+    for (int v = 0; v < vertexCount(); ++v) {
+        int in = inDegree(v) > 0 ? inDegree(v) : 1;
+        vertexWeight_[v] = 1.0 + std::log2(static_cast<double>(maxIn) / in);
     }
 }
 
