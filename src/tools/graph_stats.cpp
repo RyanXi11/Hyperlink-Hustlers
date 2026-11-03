@@ -4,7 +4,9 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -51,6 +53,43 @@ int maxInDegreeVertex(const Graph& graph) {
     return best;
 }
 
+int minInDegreeVertex(const Graph& graph) {
+    int best = 0;
+    for (int v = 1; v < graph.vertexCount(); ++v) {
+        if (graph.inDegree(v) < graph.inDegree(best)) best = v;
+    }
+    return best;
+}
+
+std::string weightText(double weight) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(2) << weight;
+    return out.str();
+}
+
+void printWeights(const Graph& graph) {
+    double minWeight = graph.vertexWeight(0);
+    double maxWeight = minWeight;
+    double total = 0;
+    for (int v = 0; v < graph.vertexCount(); ++v) {
+        double weight = graph.vertexWeight(v);
+        if (weight < minWeight) minWeight = weight;
+        if (weight > maxWeight) maxWeight = weight;
+        total += weight;
+    }
+    int hub = maxInDegreeVertex(graph);
+    int obscure = minInDegreeVertex(graph);
+
+    std::cout << "  Vertex weights (1 + log2(maxInDegree / inDegree)):\n"
+              << "    Min / mean / max:  " << weightText(minWeight) << " / "
+              << weightText(total / graph.vertexCount()) << " / " << weightText(maxWeight) << "\n"
+              << "    Most linked:       " << weightText(graph.vertexWeight(hub)) << " ("
+              << describe(graph, hub) << ", in-degree " << withCommas(graph.inDegree(hub)) << ")\n"
+              << "    Least linked:      " << weightText(graph.vertexWeight(obscure)) << " ("
+              << describe(graph, obscure) << ", in-degree " << withCommas(graph.inDegree(obscure))
+              << ")\n";
+}
+
 void printStats(const Graph& graph) {
     if (graph.vertexCount() == 0) {
         std::cout << "  Graph is empty\n";
@@ -82,6 +121,7 @@ void printStats(const Graph& graph) {
               << "\n"
               << "  Estimated memory:    " << withCommas(static_cast<long long>(graph.memoryBytes() >> 20))
               << " MB\n";
+    printWeights(graph);
 }
 
 void printRoundTrips(const Graph& graph, const std::vector<int>& ids) {
@@ -160,7 +200,8 @@ int main(int argc, char** argv) {
         std::cout << "  Lookup \"" << title << "\": "
                   << (id == -1 ? "not found" : "id " + std::to_string(id) + ", out-degree " +
                                                    std::to_string(graph.outDegree(id)) + ", in-degree " +
-                                                   std::to_string(graph.inDegree(id)))
+                                                   std::to_string(graph.inDegree(id)) + ", weight " +
+                                                   weightText(graph.vertexWeight(id)))
                   << "\n";
     }
 
