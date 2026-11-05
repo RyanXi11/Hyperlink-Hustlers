@@ -16,6 +16,7 @@ endif()
 add_library(graph
     src/graph/Graph.cpp
     src/graph/TitleMap.cpp
+    src/graph/Algorithms.cpp
 )
 target_include_directories(graph PUBLIC include)
 
