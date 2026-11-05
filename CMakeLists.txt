@@ -22,6 +22,8 @@ target_include_directories(graph PUBLIC include)
 
 add_executable(graph_stats src/tools/graph_stats.cpp)
 target_link_libraries(graph_stats PRIVATE graph)
+add_executable(wikirace src/tools/wikirace.cpp)
+target_link_libraries(wikirace PRIVATE graph)
 
 enable_testing()
 add_executable(graph_tests tests/graph_tests.cpp)
