@@ -146,6 +146,46 @@ PathResult dfs(const Graph& graph, int start_id, int target_id) {
     return notFound(explored);
 }
 
+
+PathResult dijkstra(const Graph& graph, int start_id, int target_id) {
+    if (!validIds(graph, start_id, target_id)) return notFound(0);
+ 
+    const int n = graph.vertexCount();
+    vector<double> dist(n, INF);
+    vector<int> parent(n, -1);
+    vector<char> done(n, 0);
+    MinHeap<double, int> heap;
+    int explored = 0;
+ 
+    dist[start_id] = 0.0;
+    heap.push(0.0, start_id);
+ 
+    while (!heap.empty()) {
+        int u = heap.pop().value;
+        if (done[u]) continue;  // stale entry: u was already finalized with a smaller distance
+        done[u] = 1;
+        ++explored;
+        if (u == target_id) break;  // a popped vertex's distance is final
+ 
+        for (int v : graph.outNeighbors(u)) {
+            if (v == u || done[v]) continue;
+            double candidate = dist[u] + graph.edgeWeight(u, v);
+            if (candidate < dist[v]) {
+                dist[v] = candidate;
+                parent[v] = u;
+                heap.push(candidate, v);
+            }
+        }
+    }
+ 
+    if (dist[target_id] == INF) return notFound(explored);
+    PathResult result;
+    result.path_length = dist[target_id];
+    result.nodes_explored = explored;
+    result.path = pathFromParents(parent, target_id);
+    return result;
+}
+
 PathResult bellmanFord(const Graph& graph, int start_id, int target_id) {
     int num_vertices = graph.vertexCount();
 

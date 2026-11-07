@@ -10,3 +10,8 @@ struct PathResult {
 
 // runs the Bellman-Ford algorithm from start_id to target_id
 PathResult bellmanFord(const Graph& graph, int start_id, int target_id);
+
+PathResult bfs(const Graph& graph, int start_id, int target_id);
+PathResult bidirectionalBfs(const Graph& graph, int start_id, int target_id);
+PathResult dfs(const Graph& graph, int start_id, int target_id);
+PathResult dijkstra(const Graph& graph, int start_id, int target_id);
