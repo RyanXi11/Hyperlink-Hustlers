@@ -47,6 +47,31 @@ PathResult hopResult(std::vector<int> path, int explored) {
  
 }
 
+PathResult bfs(const Graph& graph, int start_id, int target_id) {
+    if (!validIds(graph, start_id, target_id)) return notFound(0);
+    if (start_id == target_id) return trivialPath(start_id);
+ 
+    const int kUnseen = -2;
+    std::vector<int> parent(graph.vertexCount(), kUnseen);
+    std::queue<int> frontier;
+    parent[start_id] = -1;
+    frontier.push(start_id);
+    int explored = 0;
+ 
+    while (!frontier.empty()) {
+        int u = frontier.front();
+        frontier.pop();
+        ++explored;
+        for (int v : graph.outNeighbors(u)) {
+            if (v == u || parent[v] != kUnseen) continue;
+            parent[v] = u;
+            if (v == target_id) return hopResult(pathFromParents(parent, v), explored);
+            frontier.push(v);
+        }
+    }
+    return notFound(explored);
+}
+
 PathResult bellmanFord(const Graph& graph, int start_id, int target_id) {
     int num_vertices = graph.vertexCount();
 
