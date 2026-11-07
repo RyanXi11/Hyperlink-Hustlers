@@ -1,11 +1,15 @@
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
-
+ 
+#include "graph/Algorithms.h"
 #include "graph/Graph.h"
+#include "graph/MinHeap.h"
 #include "graph/TitleMap.h"
 
 namespace {
@@ -225,7 +229,150 @@ void testTitleMapGrowth() {
     CHECK(map.size() == 0 && map.find("Article 1") == -1);
 }
 
-}  // namespace
+Graph graphFromEdges(const std::string& name, const std::vector<std::pair<int, int>>& edges) {
+    std::string contents;
+    for (const auto& [a, b] : edges) contents += std::to_string(a) + " " + std::to_string(b) + "\n";
+    Graph graph;
+    CHECK(graph.loadEdges(writeTemp("search_" + name, contents)));
+    return graph;
+}
+ 
+bool validPath(const Graph& graph, const PathResult& r, int start, int target) {
+    if (r.path.empty() || r.path.front() != start || r.path.back() != target) return false;
+    for (std::size_t i = 0; i + 1 < r.path.size(); ++i) {
+        const std::vector<int>& out = graph.outNeighbors(r.path[i]);
+        if (std::find(out.begin(), out.end(), r.path[i + 1]) == out.end()) return false;
+    }
+    return true;
+}
+ 
+void testHeap() {
+    MinHeap<double, int> heap;
+    CHECK(heap.empty());
+    std::mt19937 rng(7);
+    for (int i = 0; i < 2000; ++i) heap.push(static_cast<double>(rng() % 500), i);
+    CHECK(heap.size() == 2000);
+    double previous = -1;
+    bool sorted = true;
+    while (!heap.empty()) {
+        double key = heap.pop().key;
+        if (key < previous) sorted = false;
+        previous = key;
+    }
+    CHECK(sorted);
+}
+ 
+void testSearchesOnTinyFixture() {
+    Graph graph;
+    CHECK(graph.loadEdges(kFixtures + "/tiny_edges.txt"));
+    CHECK(graph.loadTitles(kFixtures + "/tiny_names.txt"));
+    int gators = graph.idForTitle("Gators");
+    int pizza = graph.idForTitle("Pizza");
+    int nyc = graph.idForTitle("New York City");
+    int isolated = graph.idForTitle("Isolated Page");
+ 
+    for (PathResult r : {bfs(graph, gators, pizza), bidirectionalBfs(graph, gators, pizza),
+                         dfs(graph, gators, pizza), dijkstra(graph, gators, pizza)}) {
+        CHECK(validPath(graph, r, gators, pizza));
+        CHECK(r.nodes_explored > 0);
+    }
+    CHECK(near(bfs(graph, gators, pizza).path_length, 3));
+    CHECK(near(bidirectionalBfs(graph, gators, pizza).path_length, 3));
+    CHECK(near(dijkstra(graph, gators, pizza).path_length, 3));
+    CHECK(near(bfs(graph, gators, nyc).path_length, 4));
+ 
+    for (PathResult r : {bfs(graph, gators, isolated), bidirectionalBfs(graph, gators, isolated),
+                         dfs(graph, gators, isolated), dijkstra(graph, gators, isolated)}) {
+        CHECK(r.path.empty() && std::isinf(r.path_length));
+    }
+    CHECK(bfs(graph, pizza, gators).path.empty());  // links only go "downhill" into the 3-4-5 cycle
+    CHECK(near(bfs(graph, 2, 2).path_length, 0) && bfs(graph, 2, 2).path.size() == 1);
+    CHECK(near(bidirectionalBfs(graph, 2, 2).path_length, 0));
+    CHECK(bfs(graph, -1, 2).path.empty() && dijkstra(graph, 0, 99).path.empty());
+    CHECK(dfs(graph, 0, 99).path.empty() && bidirectionalBfs(graph, 99, 0).path.empty());
+ 
+    graph.setWeighted(true);
+    PathResult w = dijkstra(graph, gators, pizza);
+    CHECK(near(w.path_length, 4.0) && validPath(graph, w, gators, pizza));
+    CHECK(near(bfs(graph, gators, pizza).path_length, 3));
+}
+ 
+void testWeightedPrefersHub() {
+    std::vector<std::pair<int, int>> e = {{0, 1}, {1, 4}, {0, 2}, {2, 3}, {3, 4}};
+    for (int h = 5; h <= 9; ++h) {
+        e.push_back({h, 2});
+        e.push_back({h, 3});
+        e.push_back({h, 4});
+        e.push_back({0, h});  // keep helpers reachable
+    }
+    Graph graph = graphFromEdges("hub.txt", e);
+    graph.setWeighted(false);
+    PathResult flat = dijkstra(graph, 0, 4);
+    CHECK(flat.path.size() == 3);  // the 2-click route (0 -> h -> 4 or 0 -> 1 -> 4)
+    graph.setWeighted(true);
+    PathResult weighted = dijkstra(graph, 0, 4);
+    CHECK(validPath(graph, weighted, 0, 4));
+    // with weights, the cost is the sum of destination weights and must match brute force.
+    double cost = 0;
+    for (std::size_t i = 0; i + 1 < weighted.path.size(); ++i)
+        cost += graph.edgeWeight(weighted.path[i], weighted.path[i + 1]);
+    CHECK(near(cost, weighted.path_length));
+}
+ 
+void testDfsIsNotShortest() {
+    Graph graph = graphFromEdges("dfs.txt", {{0, 1}, {0, 2}, {2, 3}, {3, 4}, {4, 1}});
+    PathResult b = bfs(graph, 0, 1);
+    PathResult d = dfs(graph, 0, 1);
+    CHECK(near(b.path_length, 1));
+    CHECK(validPath(graph, d, 0, 1));
+    CHECK(d.path_length >= b.path_length);
+}
+ 
+void testSelfLoopsIgnored() {
+    Graph graph = graphFromEdges("loops.txt", {{0, 0}, {0, 1}, {1, 1}, {1, 2}});
+    CHECK(near(bfs(graph, 0, 2).path_length, 2));
+    CHECK(near(bidirectionalBfs(graph, 0, 2).path_length, 2));
+    CHECK(near(dijkstra(graph, 0, 2).path_length, 2));
+    CHECK(validPath(graph, dfs(graph, 0, 2), 0, 2));
+}
+ 
+// all algorithms must agree with each other
+void testRandomGraphs() {
+    std::mt19937 rng(12345);
+    for (int trial = 0; trial < 300; ++trial) {
+        int n = 4 + static_cast<int>(rng() % 40);
+        std::vector<std::pair<int, int>> edges;
+        int m = n * (1 + static_cast<int>(rng() % 4));
+        for (int i = 0; i < m; ++i) edges.push_back({static_cast<int>(rng() % n), static_cast<int>(rng() % n)});
+        edges.push_back({n - 1, 0});  // make sure vertex ids 0..n-1 all exist
+        Graph graph = graphFromEdges("rand.txt", edges);
+        int s = static_cast<int>(rng() % graph.vertexCount());
+        int t = static_cast<int>(rng() % graph.vertexCount());
+ 
+        PathResult b = bfs(graph, s, t), bi = bidirectionalBfs(graph, s, t), d = dfs(graph, s, t);
+        graph.setWeighted(false);
+        PathResult dj = dijkstra(graph, s, t), bf = bellmanFord(graph, s, t);
+        bool reachable = !b.path.empty();
+        CHECK(reachable == !bi.path.empty() && reachable == !d.path.empty() && reachable == !dj.path.empty());
+        if (reachable) {
+            CHECK(near(b.path_length, bi.path_length));
+            CHECK(near(b.path_length, dj.path_length));
+            CHECK(near(b.path_length, bf.path_length));
+            CHECK(d.path_length >= b.path_length);
+            CHECK(validPath(graph, b, s, t) && validPath(graph, bi, s, t));
+            CHECK(validPath(graph, d, s, t) && validPath(graph, dj, s, t));
+        }
+        graph.setWeighted(true);
+        PathResult wd = dijkstra(graph, s, t), wb = bellmanFord(graph, s, t);
+        CHECK(wd.path.empty() == !reachable);
+        if (reachable) {
+            CHECK(near(wd.path_length, wb.path_length));
+            CHECK(validPath(graph, wd, s, t));
+        }
+    }
+}
+ 
+}  // namespace close
 
 int main() {
     testAdjacencyLists();
