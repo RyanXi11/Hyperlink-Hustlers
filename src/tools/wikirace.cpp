@@ -1,10 +1,52 @@
 #include <iostream>
 #include <string>
 #include <limits>
+#include <fstream>
+#include <chrono>
+#include <random>
+#include <vector>
 #include "graph/Graph.h"
 #include "graph/Algorithms.h"
 
 using namespace std;
+using namespace std::chrono;
+
+void runBatchBenchmark(Graph& graph, int num_pairs) {
+    cout << "Starting batch benchmark for " << num_pairs << " random pairs..." << endl;
+    
+    // Opens CSV file for writing
+    ofstream csvFile("benchmark_results.csv");
+    csvFile << "Algorithm,Weighted,StartID,TargetID,PathLength,NodesExplored,TimeMS\n";
+    
+    int num_vertices = graph.vertexCount();
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> distrib(0, num_vertices - 1);
+
+    for (int i = 0; i < num_pairs; ++i) {
+        int start_id = distrib(gen);
+        int target_id = distrib(gen);
+        
+        // Time Bellman-Ford
+        auto start_time = high_resolution_clock::now();
+        PathResult res = bellmanFord(graph, start_id, target_id); 
+        auto end_time = high_resolution_clock::now();
+        
+        auto duration_ms = duration_cast<milliseconds>(end_time - start_time).count();
+        
+        // Writes result to CSV
+        csvFile << "Bellman-Ford," 
+                << (graph.isWeighted() ? "True" : "False") << ","
+                << start_id << "," 
+                << target_id << "," 
+                << res.path_length << "," 
+                << res.nodes_explored << "," 
+                << duration_ms << "\n";
+    }
+    
+    csvFile.close();
+    cout << "Benchmark complete. Results saved to benchmark_results.csv" << endl;
+}
 
 void runMenu(Graph& graph) {
     int choice = 0;
@@ -28,7 +70,7 @@ void runMenu(Graph& graph) {
         if (choice == 1 || choice == 2) {
             string start_title, target_title;
             cout << "Start article: ";
-            cin >> ws; // clear leading whitespace
+            cin >> ws; 
             getline(cin, start_title);
             cout << "Target article: ";
             getline(cin, target_title);
@@ -52,7 +94,8 @@ void runMenu(Graph& graph) {
             }
             
         } else if (choice == 3) {
-            cout << "Running batch benchmark..." << endl;
+            // This now calls the benchmark function for 100 pairs
+            runBatchBenchmark(graph, 100);
             
         } else if (choice == 4) {
             graph.setWeighted(!graph.isWeighted()); 
@@ -76,7 +119,6 @@ int main() {
     }
     
     cout << "Graph loaded! Vertices: " << graph.vertexCount() << endl;
-    
     runMenu(graph);
     
     return 0;
