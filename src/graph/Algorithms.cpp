@@ -30,18 +30,18 @@ PathResult trivialPath(int v) {
     return result;
 }
  
-std::vector<int> pathFromParents(const std::vector<int>& parent, int end) {
-    std::vector<int> path;
+vector<int> pathFromParents(const vector<int>& parent, int end) {
+    vector<int> path;
     for (int v = end; v != -1; v = parent[v]) path.push_back(v);
-    std::reverse(path.begin(), path.end());
+    reverse(path.begin(), path.end());
     return path;
 }
  
-PathResult hopResult(std::vector<int> path, int explored) {
+PathResult hopResult(vector<int> path, int explored) {
     PathResult result;
     result.path_length = static_cast<double>(path.size() - 1);
     result.nodes_explored = explored;
-    result.path = std::move(path);
+    result.path = move(path);
     return result;
 }
  
@@ -52,8 +52,8 @@ PathResult bfs(const Graph& graph, int start_id, int target_id) {
     if (start_id == target_id) return trivialPath(start_id);
  
     const int kUnseen = -2;
-    std::vector<int> parent(graph.vertexCount(), kUnseen);
-    std::queue<int> frontier;
+    vector<int> parent(graph.vertexCount(), kUnseen);
+    queue<int> frontier;
     parent[start_id] = -1;
     frontier.push(start_id);
     int explored = 0;
@@ -67,6 +67,80 @@ PathResult bfs(const Graph& graph, int start_id, int target_id) {
             parent[v] = u;
             if (v == target_id) return hopResult(pathFromParents(parent, v), explored);
             frontier.push(v);
+        }
+    }
+    return notFound(explored);
+}
+
+PathResult bidirectionalBfs(const Graph& graph, int start_id, int target_id) {
+    if (!validIds(graph, start_id, target_id)) return notFound(0);
+    if (start_id == target_id) return trivialPath(start_id);
+ 
+    const int n = graph.vertexCount();
+    vector<int> distF(n, -1), distB(n, -1), parentF(n, -1), parentB(n, -1);
+    vector<int> frontF = {start_id};
+    vector<int> frontB = {target_id};
+    distF[start_id] = 0;
+    distB[target_id] = 0;
+    int explored = 0;
+ 
+    while (!frontF.empty() && !frontB.empty()) {
+        const bool forward = frontF.size() <= frontB.size();
+        vector<int>& front = forward ? frontF : frontB;
+        vector<int>& dist = forward ? distF : distB;
+        vector<int>& parent = forward ? parentF : parentB;
+        const vector<int>& otherDist = forward ? distB : distF;
+ 
+        vector<int> next;
+        int bestTotal = -1;
+        int meet = -1;
+        for (int u : front) {
+            ++explored;
+            const vector<int>& neighbors = forward ? graph.outNeighbors(u) : graph.inNeighbors(u);
+            for (int v : neighbors) {
+                if (v == u || dist[v] != -1) continue;
+                dist[v] = dist[u] + 1;
+                parent[v] = u;
+                next.push_back(v);
+                if (otherDist[v] != -1) {
+                    int total = dist[v] + otherDist[v];
+                    if (bestTotal == -1 || total < bestTotal) {
+                        bestTotal = total;
+                        meet = v;
+                    }
+                }
+            }
+        }
+        if (meet != -1) {
+            vector<int> path = pathFromParents(parentF, meet);   // start..meet
+            vector<int> tail = pathFromParents(parentB, meet);   // target..meet
+            for (int i = static_cast<int>(tail.size()) - 2; i >= 0; --i) path.push_back(tail[i]);
+            return hopResult(move(path), explored);
+        }
+        front = move(next);
+    }
+    return notFound(explored);
+}
+ 
+PathResult dfs(const Graph& graph, int start_id, int target_id) {
+    if (!validIds(graph, start_id, target_id)) return notFound(0);
+    if (start_id == target_id) return trivialPath(start_id);
+ 
+    const int kUnseen = -2;
+    vector<int> parent(graph.vertexCount(), kUnseen);
+    vector<int> stack = {start_id};
+    parent[start_id] = -1;
+    int explored = 0;
+ 
+    while (!stack.empty()) {
+        int u = stack.back();
+        stack.pop_back();
+        ++explored;
+        for (int v : graph.outNeighbors(u)) {
+            if (v == u || parent[v] != kUnseen) continue;
+            parent[v] = u;
+            if (v == target_id) return hopResult(pathFromParents(parent, v), explored);
+            stack.push_back(v);
         }
     }
     return notFound(explored);
