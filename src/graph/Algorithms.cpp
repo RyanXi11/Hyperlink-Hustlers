@@ -1,11 +1,62 @@
 #include "graph/Algorithms.h"
 #include <limits>
+#include <algorithm>
+#include <queue>
+#include <vector>
+#include "graph/MinHeap.h"
 
 using namespace std;
 const double INF = numeric_limits<double>::infinity();
 
+namespace {
+ 
+bool validIds(const Graph& graph, int start_id, int target_id) {
+    int n = graph.vertexCount();
+    return start_id >= 0 && start_id < n && target_id >= 0 && target_id < n;
+}
+ 
+PathResult notFound(int explored) {
+    PathResult result;
+    result.path_length = INF;
+    result.nodes_explored = explored;
+    return result;
+}
+ 
+PathResult trivialPath(int v) {
+    PathResult result;
+    result.path_length = 0;
+    result.nodes_explored = 0;
+    result.path = {v};
+    return result;
+}
+ 
+std::vector<int> pathFromParents(const std::vector<int>& parent, int end) {
+    std::vector<int> path;
+    for (int v = end; v != -1; v = parent[v]) path.push_back(v);
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+ 
+PathResult hopResult(std::vector<int> path, int explored) {
+    PathResult result;
+    result.path_length = static_cast<double>(path.size() - 1);
+    result.nodes_explored = explored;
+    result.path = std::move(path);
+    return result;
+}
+ 
+}
+
 PathResult bellmanFord(const Graph& graph, int start_id, int target_id) {
     int num_vertices = graph.vertexCount();
+
+    if (start_id < 0 || start_id >= num_vertices || target_id < 0 || target_id >= num_vertices) {
+        PathResult invalid;
+        invalid.path_length = INF;
+        invalid.nodes_explored = 0;
+        return invalid;
+    }
+
     vector<double> dist(num_vertices, INF);
     vector<int> pred(num_vertices, -1);
     
