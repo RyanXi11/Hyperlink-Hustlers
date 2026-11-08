@@ -6,11 +6,11 @@ Usage (from repo root):
   python scripts/summarize_benchmark.py benchmark_results.csv
 
 Requires: pip install matplotlib
-Outputs:
-  benchmark_summary.csv
-  output/benchmark_time_ms.png
-  output/benchmark_nodes_explored.png
-  output/benchmark_path_length.png
+Outputs (tag derived from the CSV name or Weighted column):
+  benchmark_summary.csv or benchmark_summary_weighted.csv, etc.
+  output/benchmark_time_ms_unweighted.png (and _weighted, etc.)
+  output/benchmark_nodes_explored_<tag>.png
+  output/benchmark_path_length_<tag>.png
 """
 
 from __future__ import annotations
@@ -128,7 +128,33 @@ def print_summary_table(totals: dict[str, dict[str, float]]) -> None:
         )
 
 
-def make_charts(totals: dict[str, dict[str, float]], out_dir: Path) -> None:
+def chart_tag_for(csv_path: Path, rows: list[dict[str, str]]) -> str:
+    """Suffix for PNG names: _unweighted or _weighted."""
+    name = csv_path.name.lower()
+    if "unweighted" in name:
+        return "_unweighted"
+    if "weighted" in name:
+        return "_weighted"
+    if rows:
+        flag = rows[0].get("Weighted", "").strip().lower()
+        if flag == "true":
+            return "_weighted"
+        if flag == "false":
+            return "_unweighted"
+    return "_unweighted"
+
+
+def summary_csv_path(csv_path: Path) -> Path:
+    stem = csv_path.stem
+    if stem.startswith("benchmark_results"):
+        suffix = stem.removeprefix("benchmark_results")
+        return csv_path.with_name(f"benchmark_summary{suffix}.csv")
+    return csv_path.with_name("benchmark_summary.csv")
+
+
+def make_charts(
+    totals: dict[str, dict[str, float]], out_dir: Path, chart_tag: str
+) -> None:
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -161,9 +187,9 @@ def make_charts(totals: dict[str, dict[str, float]], out_dir: Path) -> None:
         return values
 
     specs = [
-        ("time", "Average time (ms)", "benchmark_time_ms.png"),
-        ("nodes", "Average nodes explored", "benchmark_nodes_explored.png"),
-        ("path", "Average path length", "benchmark_path_length.png"),
+        ("time", "Average time (ms)", f"benchmark_time_ms{chart_tag}.png"),
+        ("nodes", "Average nodes explored", f"benchmark_nodes_explored{chart_tag}.png"),
+        ("path", "Average path length", f"benchmark_path_length{chart_tag}.png"),
     ]
     for key, ylabel, filename in specs:
         plt.figure(figsize=(8, 4.5))
@@ -188,11 +214,12 @@ def main() -> int:
         print(f"{csv_path} is empty.")
         return 1
     totals = summarize(rows)
-    summary_path = csv_path.with_name("benchmark_summary.csv")
+    tag = chart_tag_for(csv_path, rows)
+    summary_path = summary_csv_path(csv_path)
     write_summary_csv(totals, summary_path)
     print(f"Wrote {summary_path}")
     print_summary_table(totals)
-    make_charts(totals, repo_root / "output")
+    make_charts(totals, repo_root / "output", tag)
     return 0
 
 

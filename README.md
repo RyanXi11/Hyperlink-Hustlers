@@ -1,33 +1,180 @@
-# Hyperlink-Hustlers: WikiRace Pathfinder
+<!-- Badges -->
+<p align="center">
+  <a href="https://isocpp.org/"><img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white" alt="C++" /></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/CMake-064F8C?style=for-the-badge&logo=cmake&logoColor=white" alt="CMake" /></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" /></a>
+</p>
+<p align="center">
+  <a href="https://snap.stanford.edu/data/wiki-topcats.html"><img src="https://img.shields.io/badge/SNAP%20wiki--topcats-8C1515?style=for-the-badge&logo=wikimedia&logoColor=white" alt="SNAP" /></a>
+  <a href="https://github.com/RyanXi11/Hyperlink-Hustlers"><img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub" /></a>
+</p>
 
-WikiRace is a game where you start on one Wikipedia article and try to reach a target article by clicking only the links on each page. WikiRace Pathfinder models Wikipedia as a directed graph (articles are vertices, hyperlinks are edges) and compares graph search algorithms on the same task: BFS, bidirectional BFS, DFS, Dijkstra, and Bellman-Ford.
+---
 
-Everything is written from scratch in C++. The project uses no graph, map, or priority-queue libraries.
+<h1 align="center">🔗 WikiRace Pathfinder</h1>
 
-**Team:** Ryan Xi (data and graph), Vinh Nguyen (search algorithms and Dijkstra), Daniel Gao (Bellman-Ford, menu, and benchmarks).
+<p align="center">
+  <strong>Same query. Five algorithms. Two million articles.</strong>
+</p>
 
-## Requirements
+<p align="center">
+  A COP3530 pathfinding lab on the real Wikipedia link graph: load 1.79 million articles and 28.5 million hyperlinks,
+  then race from any start title to any target using only links — while we measure who actually wins on time and nodes explored.
+  Everything is from scratch in C++17: no graph library, no <code>std::unordered_map</code> for titles, no <code>std::priority_queue</code> for Dijkstra.
+</p>
 
-- A C++17 compiler. This was tested with MSYS2 MinGW-w64 `g++` 15.2 on Windows.
-- CMake 3.16 or newer.
-- About 600 MB of free RAM to hold the full graph.
+<p align="center">
+  <a href="https://github.com/RyanXi11/Hyperlink-Hustlers"><img src="https://img.shields.io/badge/-View%20on%20GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="View on GitHub" /></a>
+</p>
 
-## Getting the data
+<p align="center">
+  <img src="assets/readme/compare-demo.png" alt="wikirace option 2: University of Florida → Pizza — all five algorithms compared" width="720" />
+</p>
+<p align="center">
+  <sub>Unweighted query on the full wiki-topcats graph (~1.79M articles). Regenerate with <code>python scripts/generate_readme_assets.py</code>.</sub>
+</p>
 
-The project uses the [wiki-topcats](https://snap.stanford.edu/data/wiki-topcats.html) graph from the Stanford SNAP collection. To download and decompress it into `data/`, run:
+---
+
+## Overview
+
+WikiRace is the game where you jump from article to article using only in-page links. **WikiRace Pathfinder** treats Wikipedia as a **directed graph** (articles = vertices, links = edges) and runs **BFS**, **bidirectional BFS**, **DFS**, **Dijkstra** (custom binary min-heap), and **Bellman-Ford** on the **same** start/target pairs.
+
+We use Stanford SNAP’s [wiki-topcats](https://snap.stanford.edu/data/wiki-topcats.html) dataset. In **unweighted** mode every click costs 1 — the right tools minimize hops. In **weighted** mode, landing on obscure pages costs more, so Dijkstra and Bellman-Ford optimize total **cost**, not click count. Batch benchmarks write CSVs; a small Python script turns them into report charts.
+
+**Hyperlink Hustlers:** Ryan Xi (graph, weights, data tooling), Vinh Nguyen (BFS, bi-BFS, DFS, heap, Dijkstra), Daniel Gao (Bellman-Ford, menu, benchmarks, video).
+
+---
+
+## How It Works
+
+1. **Download the graph** — `scripts/download_data.ps1` pulls the edge list and titles into `data/` (gitignored; too large for GitHub).
+2. **Build** — CMake produces `wikirace`, `graph_stats`, and `graph_tests`.
+3. **Query by title** — Type start and target article names; the custom hash map resolves them to ids.
+4. **Compare algorithms** — Menu option 2 runs all five on one pair and prints a side-by-side table.
+5. **Benchmark at scale** — Option 3 runs every algorithm on *N* random pairs (default 100), writes `benchmark_results.csv` / `benchmark_summary.csv`, and logs averages.
+6. **Toggle weights** — Option 4 switches unweighted vs in-degree–based costs without reloading.
+7. **Charts for the report** — `python scripts/summarize_benchmark.py …` → bar charts in `output/`.
+
+---
+
+## Key Features
+
+- **Five algorithms, one graph API** — Same adjacency lists and title map for every search; fair timing on identical queries.
+- **Bidirectional BFS** — Forward and **reverse** adjacency lists so search meets in the middle on million-vertex graphs.
+- **Custom TitleMap** — FNV-1a hashing, open addressing, linear probing; duplicate titles resolve to the lowest id.
+- **Per-vertex weights** — `1 + log2(maxInDegree / inDegree)` stored once per article (~14 MB), not on every edge.
+- **Honest baselines** — DFS finds *a* path; Bellman-Ford is correct but shows why O(VE) dies on SNAP-scale data.
+- **Batch + memory column** — CSV includes nodes explored, milliseconds, and Windows working-set MB (graph-dominated ~600 MB).
+- **Subgraph fallback** — Weakly connected induced subgraph when you cap vertices (`graph_stats --max-vertices`).
+- **Tests without terabytes** — `ctest` uses `tests/fixtures/` only; no download required for unit tests.
+
+### Programs
+
+| Program | Role |
+|---------|------|
+| `wikirace.exe` | Interactive menu: path, compare, benchmark, weights |
+| `graph_stats.exe` | Load stats, weight range, `--lookup`, optional subgraph |
+| `graph_tests` | Unit tests on tiny graphs |
+
+### WikiRace menu
+
+| Option | What it does |
+|--------|----------------|
+| **1** | One path — BFS (unweighted) or Dijkstra (weighted) |
+| **2** | All five algorithms + shortest path + timing table |
+| **3** | Random-pair batch → CSV + terminal averages |
+| **4** | Toggle weighted mode |
+| **5** | Exit |
+
+<p align="center">
+  <img src="assets/readme/menu-demo.png" alt="WikiRace Pathfinder CLI menu" width="520" />
+</p>
+
+---
+
+## Engineering Highlights
+
+**Loading 28M edges without STL graph baggage.** Edges stream in from disk with a degree-counting pass so adjacency vectors are reserved before fill. Forward and reverse lists stay in sync for bi-BFS. Titles load in a second pass into a custom map — the assignment forbids leaning on `std::unordered_map` for the title index.
+
+**Weights on destinations, not edges.** Obscurity is a property of the *page you land on*, so we precompute vertex weights once after in-degrees are known and `edgeWeight(u,v)` reads the target’s cost. Subgraphs copy those weights instead of recomputing from partial in-degrees.
+
+**Why bidirectional BFS wins on the full graph.** On random unweighted pairs, BFS and bi-BFS agree on hop count (~5–6), but bi-BFS explores on the order of **hundreds** of nodes vs **hundreds of thousands** for one-direction BFS — same shortest path, different constant factor in practice.
+
+**Bellman-Ford as a deliberate anti-pattern at scale.** With unit weights it still finds shortest hop counts, but batch averages land around **tens of seconds** and **hundreds of millions** of relaxations per pair. Keeping it in the binary makes the report’s argument for Dijkstra/BFS visual, not theoretical.
+
+**Benchmark artifacts stay local.** Root-level `benchmark_results*.csv`, `output/`, and `docs/` are gitignored; regenerate with menu option 3 and the summarize script. Checked-in charts under `assets/readme/` are updated via `scripts/generate_readme_assets.py` after a new batch run.
+
+---
+
+## Benchmark snapshots
+
+Batch averages from menu option 3 (100 random pairs). Full PNGs also land in `output/` when you run `summarize_benchmark.py`.
+
+<p align="center"><strong>Unweighted</strong></p>
+<p align="center">
+  <img src="assets/readme/benchmark_time_ms_unweighted.png" alt="Average runtime by algorithm (unweighted)" width="420" />
+  &nbsp;&nbsp;
+  <img src="assets/readme/benchmark_nodes_explored_unweighted.png" alt="Average nodes explored by algorithm (unweighted)" width="420" />
+</p>
+
+<p align="center"><strong>Weighted</strong></p>
+<p align="center">
+  <img src="assets/readme/benchmark_time_ms_weighted.png" alt="Average runtime by algorithm (weighted)" width="420" />
+  &nbsp;&nbsp;
+  <img src="assets/readme/benchmark_nodes_explored_weighted.png" alt="Average nodes explored by algorithm (weighted)" width="420" />
+</p>
+
+---
+
+## Tech Stack
+
+### Core
+- **C++17** — Graph, algorithms, CLI
+- **CMake + CTest** — Build and `graph_tests`
+
+### Data
+- **SNAP wiki-topcats** — 1,791,489 vertices, 28,511,807 edges ([dataset page](https://snap.stanford.edu/data/wiki-topcats.html))
+
+### Report tooling
+- **Python 3 + matplotlib** — `scripts/summarize_benchmark.py`, `scripts/generate_readme_assets.py`
+
+### Tested environment
+- **Windows / MSYS2 MinGW** — `g++` 15.2; ~**600 MB** RAM for the full graph
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- C++17 compiler and CMake 3.16+
+- ~600 MB free RAM (full graph)
+- PowerShell (data download script)
+
+### Installation
+
+Clone the repository:
+
+```powershell
+git clone https://github.com/RyanXi11/Hyperlink-Hustlers.git
+cd Hyperlink-Hustlers
+```
+
+Download data (once per machine):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/download_data.ps1
 ```
 
 | File | Size | Contents |
-|---|---|---|
-| `data/wiki-topcats.txt` | 422 MB | One link per line: `source_id target_id` |
-| `data/wiki-topcats-page-names.txt` | 47 MB | One article per line: `article_id title` |
+|------|------|----------|
+| `data/wiki-topcats.txt` | ~422 MB | `source_id target_id` per line |
+| `data/wiki-topcats-page-names.txt` | ~47 MB | `article_id title` per line |
 
-`data/` is gitignored because the edge list is far over GitHub's 100 MB file limit. Each teammate runs the script once. It skips files that already exist.
+`data/` is gitignored (edge list exceeds GitHub’s file limit). The script skips files that already exist.
 
-## Building and testing
+Build and test:
 
 ```powershell
 cmake -S . -B build -G "MinGW Makefiles"
@@ -35,99 +182,96 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The tests run on a small hand-written graph in `tests/fixtures/`, so they don't need the downloaded data.
-
-## Running
-
-`wikirace` is the main program: a menu to find paths, compare algorithms, and run batch benchmarks. Run it from the repo root (it loads `data/wiki-topcats.txt`):
+Run from the repo root (`wikirace` loads `data/wiki-topcats.txt` relative to cwd):
 
 ```powershell
 .\build\wikirace.exe
 ```
 
-- **1** finds a path with BFS (unweighted, fewest clicks) or Dijkstra (weighted).
-- **2** runs BFS, bidirectional BFS, Dijkstra, Bellman-Ford, and DFS on the same query and prints a timing table plus the shortest path.
-- **3** benchmarks every algorithm on `N` random pairs (default 100), writes `benchmark_results.csv` and `benchmark_summary.csv`, and prints average rows in the terminal. Memory is the process working set (MB) after each run on Windows.
-- **4** toggles weighted mode.
-
-After a batch run, generate charts for the report:
+After batch runs (menu option 3 — unweighted, then toggle weights and run again if you want weighted charts):
 
 ```powershell
 pip install matplotlib
-python scripts/summarize_benchmark.py
+python scripts/generate_readme_assets.py
 ```
 
-That reads `benchmark_results.csv`, refreshes `benchmark_summary.csv`, and saves bar charts under `output/`.
+That summarizes any `benchmark_results*.csv` it finds, writes tagged charts under `output/` (`*_unweighted.png` / `*_weighted.png`), runs the UF→Pizza demo for screenshots, and copies charts into `assets/readme/`. To only refresh charts without reloading the graph (~30s):
 
-`graph_stats` loads the graph and prints its size, load time, memory, degree extremes, and weights:
+```powershell
+python scripts/generate_readme_assets.py --skip-demo
+```
+
+Or summarize one CSV manually:
+
+```powershell
+python scripts/summarize_benchmark.py benchmark_results.csv
+```
+
+Inspect the loaded graph:
 
 ```powershell
 .\build\graph_stats.exe data\wiki-topcats.txt data\wiki-topcats-page-names.txt
 ```
 
 | Flag | What it does |
-|---|---|
-| `--lookup TITLE` | Prints an article's id, out-degree, in-degree, and weight. Titles are case-sensitive. The flag can be repeated. |
-| `--max-vertices N` | Also builds and reports a connected subgraph of `N` vertices (the fallback below). |
-| `--seed ID` | Sets the starting vertex for the subgraph. The default is the vertex with the most outgoing links. |
+|------|----------------|
+| `--lookup TITLE` | Id, out-degree, in-degree, weight (case-sensitive; repeatable) |
+| `--max-vertices N` | Also build/report a connected subgraph of `N` vertices |
+| `--seed ID` | Subgraph seed (default: highest out-degree vertex) |
 
-Sample output (abridged):
+---
 
-```
-Loaded edges in 1,396 ms
-Loaded titles in 443 ms
+## Weighted Mode
 
-Full graph
-  Vertices:            1,791,489
-  Edges:               28,511,807
-  Max in-degree:       238,040 (id 279122 "United States")
-  Estimated memory:    519 MB
-  Vertex weights (1 + log2(maxInDegree / inDegree)):
-    Min / mean / max:  1.00 / 16.82 / 18.86
-  Lookup "Pizza": id 1651404, out-degree 77, in-degree 315, weight 10.56
-```
-
-## Data format
-
-| Field | Type | Source file | Meaning |
-|---|---|---|---|
-| `source_id` | int | `wiki-topcats.txt` | Article the link is on |
-| `target_id` | int | `wiki-topcats.txt` | Article the link points to |
-| `article_id` | int | `wiki-topcats-page-names.txt` | Unique id per article, from 0 to 1,791,488 |
-| `title` | string | `wiki-topcats-page-names.txt` | Article title; can contain spaces |
-
-The edge file separates ids with a space, not a comma. The loader accepts a space, a tab, or a comma, and skips lines that start with `#` or `%`. In the titles file, everything after the first space is the title.
-
-The full graph has 1,791,489 articles and 28,511,807 links. Every article has at least one incoming and one outgoing link. Some quirks to know about:
-
-- **Self-loops:** 3,666 links point from an article to itself. They are kept as they appear in the data, so searches should skip them.
-- **Duplicate titles:** 892 titles appear on more than one article. `idForTitle` returns the lowest id.
-
-## Weighted mode
-
-In weighted mode, a link costs more when its destination is obscure. This models how human racers prefer well-known hub pages. Obscurity is measured by in-degree, the number of articles that link to a page:
+In weighted mode, a link costs more when its destination is obscure (lower in-degree):
 
 ```
 weight(v) = 1 + log2(maxInDegree / inDegree(v))
 ```
 
-Here `maxInDegree` is 238,040 (United States). An in-degree of 0, which can occur in subgraphs and tests, is treated as 1.
+`maxInDegree` = 238,040 (**United States**). In-degree 0 (subgraphs/tests) is treated as 1. Unweighted mode sets every `edgeWeight` to **1**; Dijkstra and Bellman-Ford should match BFS hop counts as a sanity check.
 
 | Article | In-degree | Weight |
-|---|---|---|
+|---------|-----------|--------|
 | United States | 238,040 | 1.00 |
 | Florida | 12,847 | 5.21 |
 | University of Florida | 2,507 | 7.57 |
 | Pizza | 315 | 10.56 |
 | Any article with one in-link | 1 | 18.86 |
 
-Every weight is at least 1, which keeps Dijkstra correct. The log scale stops one obscure page from outweighing a whole path. Because the cost depends only on the destination, weights are stored once per vertex (about 14 MB) instead of once per edge.
+Weights range from 1.00 to 18.86 (mean ~16.82 on the full graph).
 
-Unweighted mode is the default, and it costs every link 1. In that mode Dijkstra and Bellman-Ford should return the same path lengths as BFS, which makes a quick correctness check.
+---
 
-## Using the Graph API
+## Data Format
 
-All algorithms code against `include/graph/Graph.h`:
+| Field | Type | Source | Meaning |
+|-------|------|--------|---------|
+| `source_id` | int | `wiki-topcats.txt` | Article the link is on |
+| `target_id` | int | `wiki-topcats.txt` | Article the link points to |
+| `article_id` | int | page-names file | Unique id, 0 … 1,791,488 |
+| `title` | string | page-names file | Title; may contain spaces |
+
+The loader accepts space-, tab-, or comma-separated ids and skips `#` / `%` comment lines. Everything after the first space on a name line is the title. **Self-loops:** 3,666 kept in data; searches should skip them. **Duplicate titles:** 892 titles map to multiple ids; `idForTitle` returns the lowest id.
+
+---
+
+## Project Structure
+
+```
+Hyperlink-Hustlers/
+├── assets/readme/          README screenshots and benchmark PNGs (tracked)
+├── include/graph/          Graph.h, TitleMap.h
+├── src/graph/              Loader, adjacency, weights, subgraph, Algorithms.cpp
+├── src/tools/              wikirace.cpp, graph_stats.cpp
+├── tests/                  graph_tests + fixtures/
+├── scripts/                download_data.ps1, summarize_benchmark.py, generate_readme_assets.py
+├── data/                   SNAP files (gitignored)
+├── output/                 benchmark PNGs (gitignored)
+└── CMakeLists.txt
+```
+
+### Graph API
 
 ```cpp
 #include "graph/Graph.h"
@@ -139,29 +283,52 @@ if (!graph.loadEdges("data/wiki-topcats.txt") ||
     return 1;
 }
 
-int start = graph.idForTitle("University of Florida");  // -1 if not found
+int start = graph.idForTitle("University of Florida");
 int target = graph.idForTitle("Pizza");
 
-for (int next : graph.outNeighbors(start)) { /* forward links */ }
-for (int prev : graph.inNeighbors(target)) { /* reverse links, for bidirectional BFS */ }
+for (int next : graph.outNeighbors(start)) { /* forward */ }
+for (int prev : graph.inNeighbors(target)) { /* bidirectional BFS */ }
 
-graph.setWeighted(true);                          // toggle from the menu
-double cost = graph.edgeWeight(start, target);    // 1.0 when unweighted
-std::string name = graph.titleForId(target);
+graph.setWeighted(true);
+double cost = graph.edgeWeight(start, target);
 ```
 
-## Connected subgraph fallback
+`inducedConnectedSubgraph(seed, n)` grows a weakly connected subgraph of `n` vertices and remaps ids (optional fallback when memory is tight; full graph ~520 MB estimated).
 
-The full graph fits in about 520 MB, so the fallback is optional. `inducedConnectedSubgraph(seed, n)` grows a weakly connected subgraph of `n` vertices from `seed` by following links in both directions. It keeps every link between the collected vertices and renumbers them from 0, with the seed as 0. Weights are copied from the full graph rather than recomputed, so an article stays as obscure as it is on real Wikipedia.
+---
 
-With `n = 100,000`, it builds in under 200 ms and keeps 2,715,886 links.
+## Credits
 
-## Project layout
+- **J. Leskovec and A. Krevl, SNAP** — [wiki-topcats](https://snap.stanford.edu/data/wiki-topcats.html)
+- **Course** — COP3530 Project 2 (University of Florida)
+- **Team** — Vinh Nguyen, Ryan Xi, Daniel Gao
 
-```
-include/graph/       Graph.h (graph API), TitleMap.h (title-to-id hash map)
-src/graph/           Loader, adjacency lists, weights, subgraph, and hash map
-src/tools/           wikirace menu program and graph_stats loader tool
-tests/               graph_tests and small fixture files
-scripts/             download_data.ps1
-```
+---
+
+## Contact
+
+| Member | Focus |
+|--------|--------|
+| **Ryan Xi** | Graph load, TitleMap, weights, README, benchmark tooling |
+| **Vinh Nguyen** | BFS, bi-BFS, DFS, min-heap, Dijkstra |
+| **Daniel Gao** | Bellman-Ford, menu, batch UX, results, video |
+
+---
+
+## Future Ideas
+
+**Features**
+
+- [ ] Case-insensitive title lookup with explicit disambiguation for duplicate titles
+- [ ] Export path as a title chain for demos and the project video
+
+**Improvements**
+
+- [ ] Cross-platform memory metric (benchmarks use Windows working set today)
+- [ ] Configurable batch size on low-RAM machines
+
+---
+
+<p align="center">
+  <em>Built to make algorithm choice obvious — on a graph you can’t fit in a slide deck.</em>
+</p>
