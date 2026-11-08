@@ -1,0 +1,4 @@
+Algorithm,Weighted,StartID,TargetID,PathLength,NodesExplored,TimeMS,MemoryMB
+BFS,false,0,4,3,6,1,520
+DFS,false,0,4,5,8,1,520
+BFS,false,1,5,2,4,1,520

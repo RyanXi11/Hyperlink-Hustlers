@@ -22,8 +22,11 @@ target_include_directories(graph PUBLIC include)
 
 add_executable(graph_stats src/tools/graph_stats.cpp)
 target_link_libraries(graph_stats PRIVATE graph)
-add_executable(wikirace src/tools/wikirace.cpp)
+add_executable(wikirace src/tools/wikirace.cpp src/tools/ProcessMemory.cpp)
 target_link_libraries(wikirace PRIVATE graph)
+if(WIN32)
+    target_link_libraries(wikirace PRIVATE psapi)
+endif()
 
 enable_testing()
 add_executable(graph_tests tests/graph_tests.cpp)
