@@ -39,6 +39,17 @@ The tests run on a small hand-written graph in `tests/fixtures/`, so they don't 
 
 ## Running
 
+`wikirace` is the main program: a menu to find paths, compare algorithms, and run batch benchmarks. Run it from the repo root (it loads `data/wiki-topcats.txt`):
+
+```powershell
+.\build\wikirace.exe
+```
+
+- **1** finds a path with BFS (unweighted, fewest clicks) or Dijkstra (weighted).
+- **2** runs BFS, bidirectional BFS, Dijkstra, Bellman-Ford, and DFS on the same query and prints a timing table plus the shortest path.
+- **3** benchmarks every algorithm on `N` random pairs (default 100) and writes `benchmark_results.csv`.
+- **4** toggles weighted mode.
+
 `graph_stats` loads the graph and prints its size, load time, memory, degree extremes, and weights:
 
 ```powershell
@@ -141,7 +152,7 @@ With `n = 100,000`, it builds in under 200 ms and keeps 2,715,886 links.
 ```
 include/graph/       Graph.h (graph API), TitleMap.h (title-to-id hash map)
 src/graph/           Loader, adjacency lists, weights, subgraph, and hash map
-src/tools/           graph_stats command-line tool
+src/tools/           wikirace menu program and graph_stats loader tool
 tests/               graph_tests and small fixture files
 scripts/             download_data.ps1
 ```
