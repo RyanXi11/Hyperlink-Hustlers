@@ -9,10 +9,12 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "graph/Algorithms.h"
 #include "graph/Graph.h"
+#include "tools/ProcessMemory.h"
 
 namespace {
 
@@ -22,6 +24,17 @@ using AlgoFn = PathResult (*)(const Graph&, int, int);
 struct TimedPath {
     PathResult result;
     long long time_ms = 0;
+    long long memory_mb = -1;  // process working set after the run; -1 if unavailable
+};
+
+struct BatchTotals {
+    long long runs = 0;
+    long long reachable = 0;
+    long long sum_nodes = 0;
+    long long sum_time_ms = 0;
+    long long sum_memory_mb = 0;
+    long long memory_samples = 0;
+    double sum_path_length = 0;
 };
 
 struct AlgorithmSpec {
@@ -37,6 +50,15 @@ const std::vector<AlgorithmSpec> kAllAlgorithms = {
     {"DFS", dfs},
 };
 
+std::string withCommas(long long value);
+
+std::string formatMemoryMb(long long memory_mb) {
+    if (memory_mb < 0) {
+        return "n/a";
+    }
+    return std::to_string(memory_mb);
+}
+
 TimedPath timeAlgorithm(const Graph& graph, int start_id, int target_id, AlgoFn fn) {
     auto t0 = Clock::now();
     PathResult result = fn(graph, start_id, target_id);
@@ -45,7 +67,85 @@ TimedPath timeAlgorithm(const Graph& graph, int start_id, int target_id, AlgoFn 
     timed.result = std::move(result);
     timed.time_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    const std::size_t bytes = processWorkingSetBytes();
+    if (bytes > 0) {
+        timed.memory_mb = static_cast<long long>((bytes + 512ULL * 1024ULL) / (1024ULL * 1024ULL));
+    }
     return timed;
+}
+
+void recordBatchRow(BatchTotals& bucket, const TimedPath& timed) {
+    ++bucket.runs;
+    bucket.sum_nodes += timed.result.nodes_explored;
+    bucket.sum_time_ms += timed.time_ms;
+    if (std::isfinite(timed.result.path_length)) {
+        ++bucket.reachable;
+        bucket.sum_path_length += timed.result.path_length;
+    }
+    if (timed.memory_mb >= 0) {
+        bucket.sum_memory_mb += timed.memory_mb;
+        ++bucket.memory_samples;
+    }
+}
+
+void printBatchSummary(const std::unordered_map<std::string, BatchTotals>& totals) {
+    if (totals.empty()) {
+        return;
+    }
+    std::cout << "\nBatch averages\n"
+              << "Algorithm          Avg path   Avg nodes   Avg ms   Avg mem MB\n"
+              << std::string(60, '-') << "\n";
+    for (const AlgorithmSpec& spec : kAllAlgorithms) {
+        auto it = totals.find(spec.name);
+        if (it == totals.end() || it->second.runs == 0) {
+            continue;
+        }
+        const BatchTotals& row = it->second;
+        std::ostringstream avg_path;
+        if (row.reachable > 0) {
+            avg_path << std::fixed << std::setprecision(2)
+                     << (row.sum_path_length / static_cast<double>(row.reachable));
+        } else {
+            avg_path << "N/A";
+        }
+        std::string avg_mem = "n/a";
+        if (row.memory_samples > 0) {
+            avg_mem = std::to_string(row.sum_memory_mb / row.memory_samples);
+        }
+        std::cout << std::left << std::setw(19) << spec.name << std::right << std::setw(10)
+                  << avg_path.str() << std::setw(12) << withCommas(row.sum_nodes / row.runs)
+                  << std::setw(9) << withCommas(row.sum_time_ms / row.runs) << std::setw(11)
+                  << avg_mem << "\n";
+    }
+    std::cout << std::string(60, '-') << "\n";
+}
+
+void writeBatchSummaryCsv(const std::unordered_map<std::string, BatchTotals>& totals) {
+    std::ofstream csv("benchmark_summary.csv");
+    if (!csv) {
+        std::cout << "Could not write benchmark_summary.csv\n";
+        return;
+    }
+    csv << "Algorithm,Runs,Reachable,AvgPathLength,AvgNodesExplored,AvgTimeMS,AvgMemoryMB\n";
+    for (const AlgorithmSpec& spec : kAllAlgorithms) {
+        auto it = totals.find(spec.name);
+        if (it == totals.end()) {
+            continue;
+        }
+        const BatchTotals& row = it->second;
+        csv << spec.name << ',' << row.runs << ',' << row.reachable << ',';
+        if (row.reachable > 0) {
+            csv << (row.sum_path_length / static_cast<double>(row.reachable));
+        }
+        csv << ',' << (row.runs > 0 ? static_cast<double>(row.sum_nodes) / row.runs : 0) << ','
+            << (row.runs > 0 ? static_cast<double>(row.sum_time_ms) / row.runs : 0) << ',';
+        if (row.memory_samples > 0) {
+            csv << (static_cast<double>(row.sum_memory_mb) / row.memory_samples);
+        }
+        csv << '\n';
+    }
+    std::cout << "Wrote benchmark_summary.csv\n"
+              << "Charts: python scripts/summarize_benchmark.py\n\n";
 }
 
 bool readTitles(int& start_id, int& target_id, const Graph& graph) {
@@ -156,7 +256,9 @@ void printSinglePath(const Graph& graph, int start_id, int target_id) {
 
     std::cout << "\n  Path length:      " << formatLength(timed.result.path_length) << "\n"
               << "  Nodes explored:   " << withCommas(timed.result.nodes_explored) << "\n"
-              << "  Time (ms):        " << withCommas(timed.time_ms) << "\n";
+              << "  Time (ms):        " << withCommas(timed.time_ms) << "\n"
+              << "  Memory (MB):      " << formatMemoryMb(timed.memory_mb)
+              << "  (process working set after run)\n";
 
     if (timed.result.path.empty()) {
         std::cout << "\n  No path found.\n";
@@ -175,10 +277,12 @@ void printComparison(const Graph& graph, int start_id, int target_id) {
     std::cout << "Query\n"
               << "  From: " << articleLabel(graph, start_id) << "\n"
               << "  To:   " << articleLabel(graph, target_id) << "\n"
-              << "  Mode: " << (graph.isWeighted() ? "weighted" : "unweighted") << "\n";
+              << "  Mode: " << (graph.isWeighted() ? "weighted" : "unweighted") << "\n"
+              << "  Graph estimate:   ~" << withCommas(static_cast<long long>(graph.memoryBytes() >> 20))
+              << " MB loaded structure\n";
 
-    std::cout << "\nAlgorithm          Path length   Nodes explored    Time (ms)\n"
-              << std::string(60, '-') << "\n";
+    std::cout << "\nAlgorithm          Path length   Nodes explored    Time (ms)  Memory (MB)\n"
+              << std::string(72, '-') << "\n";
 
     PathResult path_to_show;
 
@@ -187,7 +291,8 @@ void printComparison(const Graph& graph, int start_id, int target_id) {
         std::cout << std::left << std::setw(19) << spec.name << std::right << std::setw(14)
                   << formatLength(timed.result.path_length) << std::setw(18)
                   << withCommas(timed.result.nodes_explored) << std::setw(13)
-                  << withCommas(timed.time_ms) << "\n";
+                  << withCommas(timed.time_ms) << std::setw(13) << formatMemoryMb(timed.memory_mb)
+                  << "\n";
 
         if (!graph.isWeighted() && spec.run == bfs && !timed.result.path.empty()) {
             path_to_show = timed.result;
@@ -197,7 +302,7 @@ void printComparison(const Graph& graph, int start_id, int target_id) {
         }
     }
 
-    std::cout << std::string(60, '-') << "\n";
+    std::cout << std::string(72, '-') << "\n";
     if (!path_to_show.path.empty()) {
         std::cout << "\n"
                   << (graph.isWeighted() ? "Shortest path (Dijkstra):\n"
@@ -227,7 +332,12 @@ void runBatchBenchmark(const Graph& graph, int num_pairs) {
         std::cout << "Could not open benchmark_results.csv for writing.\n";
         return;
     }
-    csv << "Algorithm,Weighted,StartID,TargetID,PathLength,NodesExplored,TimeMS\n";
+    csv << "Algorithm,Weighted,StartID,TargetID,PathLength,NodesExplored,TimeMS,MemoryMB\n";
+
+    std::unordered_map<std::string, BatchTotals> totals;
+    for (const AlgorithmSpec& spec : kAllAlgorithms) {
+        totals.emplace(spec.name, BatchTotals{});
+    }
 
     const int vertices = graph.vertexCount();
     std::random_device rd;
@@ -239,11 +349,13 @@ void runBatchBenchmark(const Graph& graph, int num_pairs) {
         int target_id = pick(gen);
         for (const AlgorithmSpec& spec : kAllAlgorithms) {
             TimedPath timed = timeAlgorithm(graph, start_id, target_id, spec.run);
+            recordBatchRow(totals[spec.name], timed);
             csv << spec.name << ',' << (graph.isWeighted() ? "true" : "false") << ','
                 << start_id << ',' << target_id << ','
                 << (std::isfinite(timed.result.path_length) ? std::to_string(timed.result.path_length)
                                                             : "inf")
-                << ',' << timed.result.nodes_explored << ',' << timed.time_ms << '\n';
+                << ',' << timed.result.nodes_explored << ',' << timed.time_ms << ','
+                << (timed.memory_mb >= 0 ? std::to_string(timed.memory_mb) : "") << '\n';
         }
         if ((pair + 1) % 10 == 0 || pair + 1 == num_pairs) {
             std::cout << "  Finished " << (pair + 1) << " / " << num_pairs << " pairs\r"
@@ -251,6 +363,8 @@ void runBatchBenchmark(const Graph& graph, int num_pairs) {
         }
     }
     std::cout << "\nBenchmark complete. Results saved to benchmark_results.csv\n";
+    printBatchSummary(totals);
+    writeBatchSummaryCsv(totals);
 }
 
 int readPairCount() {

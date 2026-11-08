@@ -47,8 +47,17 @@ The tests run on a small hand-written graph in `tests/fixtures/`, so they don't 
 
 - **1** finds a path with BFS (unweighted, fewest clicks) or Dijkstra (weighted).
 - **2** runs BFS, bidirectional BFS, Dijkstra, Bellman-Ford, and DFS on the same query and prints a timing table plus the shortest path.
-- **3** benchmarks every algorithm on `N` random pairs (default 100) and writes `benchmark_results.csv`.
+- **3** benchmarks every algorithm on `N` random pairs (default 100), writes `benchmark_results.csv` and `benchmark_summary.csv`, and prints average rows in the terminal. Memory is the process working set (MB) after each run on Windows.
 - **4** toggles weighted mode.
+
+After a batch run, generate charts for the report:
+
+```powershell
+pip install matplotlib
+python scripts/summarize_benchmark.py
+```
+
+That reads `benchmark_results.csv`, refreshes `benchmark_summary.csv`, and saves bar charts under `output/`.
 
 `graph_stats` loads the graph and prints its size, load time, memory, degree extremes, and weights:
 
